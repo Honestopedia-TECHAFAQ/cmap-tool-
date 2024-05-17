@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mind Mapping Tool</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+ <style>
+  .canvas-container {
+    position: relative;
+    width: 100%;
+    height: 500px; 
+    border: 1px solid #ccc;
+  }
+  .concept-node, .flowchart-shape {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    background-color: #007bff;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+  }
+  .connection {
+    position: absolute;
+    background-color: transparent;
+    pointer-events: none;
+    z-index: -1;
+  }
+  .text-annotation {
+    position: absolute;
+    background-color: white;
+    padding: 5px;
+    border: 1px solid #ccc;
+    cursor: move;
+  }
+ </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="canvas-container" id="concept-map"></div>
+        <button class="btn btn-primary mt-3" onclick="saveAsImage('concept-map')">Save Concept Map</button>
+        <button class="btn btn-secondary ml-2 mt-3" onclick="resetCanvas('concept-map')">Reset Concept Map</button>
+      </div>
+      <div class="col-md-6">
+        <div class="canvas-container" id="flowchart"></div>
+        <button class="btn btn-primary mt-3" onclick="saveAsImage('flowchart')">Save Flowchart</button>
+        <button class="btn btn-secondary ml-2 mt-3" onclick="resetCanvas('flowchart')">Reset Flowchart</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/0.4.1/html2canvas.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    class ConceptMapCanvas {
+      constructor(containerId) {
+        this.container = document.getElementById(containerId);
+        this.nodes = [];
+        this.connections = [];
+        this.dragging = false;
+        this.draggedNode = null;
+        this.startNode = null;
+        this.connectionPreview = null;
+        this.initCanvas();
+        this.container.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.container.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.container.addEventListener('mouseup', this.handleMouseUp.bind(this));
+      }
+
+      initCanvas() {
+        this.container.innerHTML = "<h3>Concept Map</h3>";
+      }
+
+      addNode(x, y) {
+        const node = document.createElement('div');
+        node.className = 'concept-node';
+        node.style.left = `${x}px`;
+        node.style.top = `${y}px`;
+        node.innerText = this.nodes.length + 1;
+        this.container.appendChild(node);
+        this.nodes.push({ x, y, element: node });
+      }
+
+      startConnection(node) {
+        this.startNode = node;
+        this.container.addEventListener('mousemove', this.handleMouseMoveForConnection.bind(this));
+        this.connectionPreview = document.createElement('div');
+        this.connectionPreview.className = 'connection';
+        this.container.appendChild(this.connectionPreview);
+      }
+
+      handleMouseDown(event) {
+        const mouseX = event.clientX - this.container.getBoundingClientRect().left;
+        const mouseY = event.clientY - this.container.getBoundingClientRect().top;
+        if (event.target === this.container) {
+          this.addNode(mouseX, mouseY);
+        } else if (event.target.classList.contains('concept-node')) {
+          this.startConnection(this.nodes.find(n => n.element === event.target));
+        }
+        this.dragging = true;
+        this.draggedNode = { x: mouseX, y: mouseY };
+      }
+
+      handleMouseMove(event) {
+        if (this.dragging) {
+          const mouseX = event.clientX - this.container.getBoundingClientRect().left;
+          const mouseY = event.clientY - this.container.getBoundingClientRect().top;
+          const dx = mouseX - this.draggedNode.x;
+          const dy = mouseY - this.draggedNode.y;
+          this.nodes.forEach(node => {
+            node.element.style.left = `${node.x + dx}px`;
+            node.element.style.top = `${node.y + dy}px`;
+          });
+          this.connections.forEach(connection => {
+            connection.element.style.left = `${connection.startNode.x}px`;
+            connection.element.style.top = `${connection.startNode.y}px`;
+          });
+          this.draggedNode = { x: mouseX, y: mouseY };
+        }
+      }
+
+      handleMouseMoveForConnection(event) {
+        if (this.startNode) {
+          const mouseX = event.clientX - this.container.getBoundingClientRect().left;
+          const mouseY = event.clientY - this.container.getBoundingClientRect().top;
+          this.connectionPreview.style.left = `${this.startNode.x}px`;
+          this.connectionPreview.style.top = `${this.startNode.y}px`;
+          this.connectionPreview.style.width = `${mouseX - this.startNode.x}px`;
+          this.connectionPreview.style.height = `${mouseY - this.startNode.y}px`;
+        }
+      }
+
+      handleMouseUp(event) {
+        if (this.startNode) {
+          const endNode = this.nodes.find(node => node.element.contains(event.target));
+          if (endNode && endNode !== this.startNode) {
+            const connection = document.createElement('div');
+            connection.className = 'connection';
+            connection.style.left = `${this.startNode.x}px`;
+            connection.style.top = `${this.startNode.y}px`;
+            connection.style.width = `${endNode.x - this.startNode.x}px`;
+            connection.style.height = `${endNode.y - this.startNode.y}px`;
+            this.container.appendChild(connection);
+            this.connections.push({ startNode: this.startNode, endNode, element: connection });
+          }
+          this.container.removeChild(this.connectionPreview);
+          this.startNode = null;
+        }
+        this.dragging = false;
+      }
+    }
+
+    class FlowchartCanvas {
+      constructor(containerId) {
+        this.container = document.getElementById(containerId);
+        this.shapes = [];
+        this.textAnnotations = [];
+        this.dragging = false;
+        this.draggedShape = null;
+        this.initCanvas();
+        this.container.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.container.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.container.addEventListener('mouseup', this.handleMouseUp.bind(this));
+      }
+
+      initCanvas() {
+        this.container.innerHTML = "<h3>Flowchart</h3>";
+      }
+
+      addShape(x, y) {
+        const shape = document.createElement('div');
+        shape.className = 'flowchart-shape';
+        shape.style.left = `${x}px`;
+        shape.style.top = `${y}px`;
+        this.container.appendChild(shape);
+        this.shapes.push({ x, y, element: shape });
+      }
+
+      addTextAnnotation(x, y) {
+        const text = prompt('Enter text:');
+        if (text) {
+          const annotation = document.createElement('div');
+          annotation.className = 'text-annotation';
+          annotation.innerText = text;
+          annotation.style.left = `${x}px`;
+          annotation.style.top = `${y}px`;
+          this.container.appendChild(annotation);
+          this.textAnnotations.push({ x, y, text, element: annotation });
+        }
+      }
+
+      handleMouseDown(event) {
+        const mouseX = event.clientX - this.container.getBoundingClientRect().left;
+        const mouseY = event.clientY - this.container.getBoundingClientRect().top;
+        if (event.target === this.container) {
+          this.addShape(mouseX, mouseY);
+        } else if (event.target.classList.contains('flowchart-shape')) {
+          this.dragging = true;
+          this.draggedShape = { x: mouseX, y: mouseY, element: event.target };
+        }
+      }
+
+      handleMouseMove(event) {
+        if (this.dragging) {
+          const mouseX = event.clientX - this.container.getBoundingClientRect().left;
+          const mouseY = event.clientY - this.container.getBoundingClientRect().top;
+          const dx = mouseX - this.draggedShape.x;
+          const dy = mouseY - this.draggedShape.y;
+          this.draggedShape.element.style.left = `${this.draggedShape.x + dx}px`;
+          this.draggedShape.element.style.top = `${this.draggedShape.y + dy}px`;
+          this.textAnnotations.forEach(annotation => {
+            if (annotation.element.contains(this.draggedShape.element)) {
+              annotation.element.style.left = `${annotation.x + dx}px`;
+              annotation.element.style.top = `${annotation.y + dy}px`;
+            }
+          });
+          this.draggedShape = { x: mouseX, y: mouseY, element: this.draggedShape.element };
+        }
+      }
+
+      handleMouseUp() {
+        this.dragging = false;
+        this.draggedShape = null;
+      }
+    }
+
+    const conceptMapCanvas = new ConceptMapCanvas('concept-map');
+    const flowchartCanvas = new FlowchartCanvas('flowchart');
+
+    window.saveAsImage = function(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      html2canvas(canvas, {
+        allowTaint: true,
+        useCORS: true,
+      }).then(function(canvas) {
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL();
+        link.download = `mind_map_${canvasId}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+    };
+
+    window.resetCanvas = function(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      canvas.innerHTML = '';
+      if (canvasId === 'concept-map') {
+        conceptMapCanvas.nodes = [];
+        conceptMapCanvas.connections = [];
+      } else if (canvasId === 'flowchart') {
+        flowchartCanvas.shapes = [];
+        flowchartCanvas.textAnnotations = [];
+      }
+    };
+  });
+</script>
+</body>
+</html>
